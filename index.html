@@ -687,7 +687,8 @@ function setPalette(p,btn){
 }
 
 function renderSpec(){
-  const src=dctx.getImageData(0,0,W,H);
+  const src = pixelBuffer || (()=>{ try{ return dctx.getImageData(0,0,W,H); }catch(e){ return null; } })();
+  if(!src) return;
   const out=sctx.createImageData(W,H);
   for(let y=0;y<H;y++){
     for(let x=0;x<W;x++){
@@ -755,7 +756,7 @@ function updateStatus(x,y){
   document.getElementById('s-pix').textContent=c.toLocaleString();
 }
 
-function clearDraw(){ dctx.fillStyle='#07070d'; dctx.fillRect(0,0,W,H); sctx.fillStyle='#07070d'; sctx.fillRect(0,0,W,H); }
+function clearDraw(){ dctx.fillStyle='#07070d'; dctx.fillRect(0,0,W,H); sctx.fillStyle='#07070d'; sctx.fillRect(0,0,W,H); offCtx.fillStyle='#07070d'; offCtx.fillRect(0,0,W,H); pixelBuffer=null; }
 
 function loadPreset(){
   clearDraw();
@@ -776,11 +777,41 @@ function loadPreset(){
   dctx.globalCompositeOperation='source-over';
 }
 
+// Offscreen canvas for safe pixel reading (avoids CORS/taint on main canvas)
+const offCanvas = document.createElement('canvas');
+offCanvas.width = W; offCanvas.height = H;
+const offCtx = offCanvas.getContext('2d', {willReadFrequently: true});
+let pixelBuffer = null; // always up-to-date pixel data
+
+function syncOffscreen(){
+  // Copy current draw canvas → offscreen, then snapshot pixels
+  offCtx.drawImage(drawCanvas, 0, 0);
+  try { pixelBuffer = offCtx.getImageData(0, 0, W, H); } catch(e) { pixelBuffer = null; }
+}
+
 function importImage(e){
-  const file=e.target.files[0]; if(!file)return;
-  const reader=new FileReader();
-  reader.onload=ev=>{ const img=new Image(); img.onload=()=>{ dctx.fillStyle='#07070d'; dctx.fillRect(0,0,W,H); dctx.globalAlpha=.95; dctx.drawImage(img,0,0,W,H); dctx.globalAlpha=1; if(currentTab==='spec')renderSpec(); }; img.src=ev.target.result; };
-  reader.readAsDataURL(file); e.target.value='';
+  const file = e.target.files[0]; if(!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    // Draw into OFFSCREEN first — same origin, never tainted
+    offCtx.fillStyle = '#07070d';
+    offCtx.fillRect(0, 0, W, H);
+    offCtx.drawImage(img, 0, 0, W, H);
+    // Snapshot pixel data while it's clean
+    try { pixelBuffer = offCtx.getImageData(0, 0, W, H); } catch(err) { pixelBuffer = null; }
+    // Copy visual to main draw canvas (display only)
+    dctx.fillStyle = '#07070d';
+    dctx.fillRect(0, 0, W, H);
+    dctx.drawImage(offCanvas, 0, 0);
+    URL.revokeObjectURL(url);
+    if(currentTab === 'spec') renderSpec();
+    document.getElementById('m-state').textContent = 'imagem carregada ✓';
+    setTimeout(()=>{ if(!playing) document.getElementById('m-state').textContent='pronto'; }, 2000);
+  };
+  img.onerror = () => URL.revokeObjectURL(url);
+  img.src = url;
+  e.target.value = '';
 }
 
 function getAC(){
@@ -895,7 +926,13 @@ function startPlay(){
   document.getElementById('play-lbl').textContent='pausar';
   document.getElementById('m-state').textContent='reproduzindo';
 
-  imgData = dctx.getImageData(0,0,W,H);
+  // Use pre-captured pixelBuffer (imported image, safe) or fall back to drawing canvas
+  if(pixelBuffer){
+    imgData = pixelBuffer;
+  } else {
+    try { imgData = dctx.getImageData(0,0,W,H); } catch(e) { imgData = null; }
+  }
+  if(!imgData){ stopAll(); return; }
   nextCol = 0;
   playStartTime = ac.currentTime + 0.05;
   colAudioTime  = playStartTime;
