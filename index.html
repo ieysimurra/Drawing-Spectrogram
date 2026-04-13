@@ -784,15 +784,36 @@ function importImage(e){
 }
 
 function getAC(){
-  if(!audioCtx){ audioCtx=new(window.AudioContext||window.webkitAudioContext)(); analyser=audioCtx.createAnalyser(); analyser.fftSize=512; analyser.connect(audioCtx.destination); }
-  if(audioCtx.state==='suspended')audioCtx.resume();
+  if(!audioCtx){
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    analyser=audioCtx.createAnalyser();
+    analyser.fftSize=512;
+    // master gain → analyser → destination
+    masterGain=audioCtx.createGain();
+    masterGain.gain.value=0.6;
+    masterGain.connect(analyser);
+    analyser.connect(audioCtx.destination);
+  }
+  if(audioCtx.state==='suspended') audioCtx.resume();
   return audioCtx;
 }
 
-function togglePlay(){ if(playing)stopAll(); else startPlay(); }
+let masterGain=null;
+let schedTimerId=null;
+let imgData=null;
+let nextCol=0;        // next column index to schedule
+let colAudioTime=0;   // AudioContext time when nextCol should play
+
+// How many seconds of audio to schedule ahead per tick
+const LOOKAHEAD_SEC = 0.15;
+// Scheduler tick interval in ms
+const SCHED_INTERVAL_MS = 50;
+
+function togglePlay(){ if(playing) stopAll(); else startPlay(); }
 
 function stopAll(){
   playing=false;
+  clearInterval(schedTimerId); schedTimerId=null;
   scheduledOscs.forEach(o=>{ try{o.stop(0);}catch(e){} }); scheduledOscs=[];
   if(animId){cancelAnimationFrame(animId);animId=null;}
   document.getElementById('playhead').style.display='none';
@@ -806,65 +827,136 @@ function stopAll(){
   document.getElementById('vol-bar').style.width='0%';
 }
 
+function scheduleCol(col, atTime){
+  if(!imgData) return;
+  const wtype = WAVES[Math.round(P.wave)];
+  const attSec = P.att / 1000;
+  const secPerCol = P.dur / W;
+  const noteDur = Math.max(secPerCol * 4, 0.06);
+
+  for(let row=0; row<H; row+=3){
+    const i=(row*W+col)*4;
+    const r=imgData.data[i], g=imgData.data[i+1], b=imgData.data[i+2];
+    const br=(r*0.299 + g*0.587 + b*0.114)/255;
+    if(br < 0.04) continue;
+
+    const freq = yToFreq(row);
+    // Clamp frequency to valid Web Audio range
+    if(freq < 20 || freq > 20000) continue;
+
+    const amp = Math.min(0.12, br * 0.18);
+    const atkT = Math.min(attSec, noteDur * 0.25);
+    const relT = Math.min(0.04, noteDur * 0.3);
+
+    const osc = audioCtx.createOscillator();
+    const gn  = audioCtx.createGain();
+    osc.type = wtype;
+    osc.frequency.value = freq;
+
+    gn.gain.setValueAtTime(0, atTime);
+    gn.gain.linearRampToValueAtTime(amp, atTime + atkT);
+    gn.gain.setValueAtTime(amp, atTime + noteDur - relT);
+    gn.gain.linearRampToValueAtTime(0, atTime + noteDur);
+
+    osc.connect(gn);
+    gn.connect(masterGain);
+    osc.start(atTime);
+    osc.stop(atTime + noteDur + 0.01);
+    scheduledOscs.push(osc);
+  }
+}
+
+function runScheduler(){
+  if(!playing || !audioCtx) return;
+  const ac = audioCtx;
+  const secPerCol = P.dur / W;
+
+  // Schedule all columns whose audio time falls within the lookahead window
+  while(nextCol < W && colAudioTime < ac.currentTime + LOOKAHEAD_SEC){
+    scheduleCol(nextCol, colAudioTime);
+    nextCol++;
+    colAudioTime += secPerCol;
+  }
+
+  // Finished scheduling all columns
+  if(nextCol >= W){
+    clearInterval(schedTimerId);
+    schedTimerId=null;
+  }
+}
+
 function startPlay(){
-  if(playing)return;
-  const ac=getAC(); playing=true;
+  if(playing) return;
+  const ac = getAC();
+  playing = true;
+
   document.getElementById('play-btn').classList.add('playing');
   document.getElementById('play-icon').textContent='⏸';
   document.getElementById('play-lbl').textContent='pausar';
   document.getElementById('m-state').textContent='reproduzindo';
 
-  const img=dctx.getImageData(0,0,W,H);
-  const wtype=WAVES[Math.round(P.wave)];
-  const attSec=P.att/1000;
-  const master=ac.createGain(); master.gain.value=.55; master.connect(analyser);
-  const now=ac.currentTime+.05; playStartTime=now;
-  const sliceT=P.dur/W;
+  imgData = dctx.getImageData(0,0,W,H);
+  nextCol = 0;
+  playStartTime = ac.currentTime + 0.05;
+  colAudioTime  = playStartTime;
 
-  for(let col=0;col<W;col+=3){
-    const tStart=now+col/W*P.dur;
-    for(let row=0;row<H;row+=4){
-      const i=(row*W+col)*4;
-      const br=(img.data[i]*.299+img.data[i+1]*.587+img.data[i+2]*.114)/255;
-      if(br<.05)continue;
-      const freq=yToFreq(row), amp=Math.min(.1,br*.14), dur2=Math.max(sliceT*3,.05);
-      const osc=ac.createOscillator(), gn=ac.createGain();
-      osc.type=wtype; osc.frequency.value=freq;
-      gn.gain.setValueAtTime(0,tStart);
-      gn.gain.linearRampToValueAtTime(amp,tStart+Math.min(attSec,dur2*.3));
-      gn.gain.setValueAtTime(amp,tStart+dur2*.65);
-      gn.gain.linearRampToValueAtTime(0,tStart+dur2);
-      osc.connect(gn); gn.connect(master);
-      osc.start(tStart); osc.stop(tStart+dur2+.02);
-      scheduledOscs.push(osc);
-    }
-  }
+  // Kick off the lookahead scheduler
+  runScheduler();
+  schedTimerId = setInterval(runScheduler, SCHED_INTERVAL_MS);
 
-  const phEl=document.getElementById('playhead'); phEl.style.display='block';
-  const frameEl=document.getElementById('view-area');
+  // Visual animation loop — driven purely by AudioContext clock
+  const phEl = document.getElementById('playhead');
+  phEl.style.display = 'block';
+  const frameEl = document.getElementById('view-area');
 
   function animate(){
-    if(!playing)return;
-    const elapsed=ac.currentTime-playStartTime, progress=Math.min(elapsed/P.dur,1);
-    const fw=frameEl.clientWidth, YOFF=38;
-    phEl.style.left=(YOFF+progress*(fw-YOFF))+'px';
-    document.getElementById('m-prog').textContent=Math.round(progress*100)+'%';
-    const col=Math.round(progress*W);
-    document.getElementById('m-col').textContent=col+'/'+W;
-    if(col<W){ let maxBr=0,maxRow=H/2; for(let row=0;row<H;row+=4){ const i=(row*W+col)*4; const br=(img.data[i]*.299+img.data[i+1]*.587+img.data[i+2]*.114)/255; if(br>maxBr){maxBr=br;maxRow=row;} } const df=Math.round(yToFreq(maxRow)); document.getElementById('m-freq').textContent=df>=1000?(df/1000).toFixed(2)+'kHz':df+'Hz'; }
-    const bufLen=analyser.frequencyBinCount, td=new Uint8Array(bufLen);
+    if(!playing) return;
+    const elapsed  = ac.currentTime - playStartTime;
+    const progress = Math.min(elapsed / P.dur, 1);
+    const fw = frameEl.clientWidth;
+    const YOFF = 38;
+    phEl.style.left = (YOFF + progress*(fw-YOFF)) + 'px';
+
+    document.getElementById('m-prog').textContent = Math.round(progress*100)+'%';
+    const col = Math.min(Math.round(progress*W), W-1);
+    document.getElementById('m-col').textContent = col+'/'+W;
+
+    // Dominant frequency at current column
+    let maxBr=0, maxRow=H/2;
+    for(let row=0;row<H;row+=4){
+      const i=(row*W+col)*4;
+      const br=(imgData.data[i]*0.299+imgData.data[i+1]*0.587+imgData.data[i+2]*0.114)/255;
+      if(br>maxBr){maxBr=br;maxRow=row;}
+    }
+    const df=Math.round(yToFreq(maxRow));
+    document.getElementById('m-freq').textContent=df>=1000?(df/1000).toFixed(2)+'kHz':df+'Hz';
+
+    // Waveform display
+    const bufLen=analyser.frequencyBinCount;
+    const td=new Uint8Array(bufLen);
     analyser.getByteTimeDomainData(td);
-    wctx.fillStyle='#07070d'; wctx.fillRect(0,0,waveC.width,waveC.height);
-    wctx.strokeStyle='#8860e0'; wctx.lineWidth=1.5; wctx.beginPath();
+    wctx.fillStyle='#07070d';
+    wctx.fillRect(0,0,waveC.width,waveC.height);
+    wctx.strokeStyle='#8860e0';
+    wctx.lineWidth=1.5;
+    wctx.beginPath();
     const sw=waveC.width/bufLen;
-    for(let i=0;i<bufLen;i++){ const v=td[i]/128,yy=(v*waveC.height)/2; i===0?wctx.moveTo(0,yy):wctx.lineTo(i*sw,yy); }
+    for(let i=0;i<bufLen;i++){
+      const v=td[i]/128, yy=(v*waveC.height)/2;
+      i===0 ? wctx.moveTo(0,yy) : wctx.lineTo(i*sw,yy);
+    }
     wctx.stroke();
-    const fd=new Uint8Array(bufLen); analyser.getByteFrequencyData(fd);
-    document.getElementById('vol-bar').style.width=Math.min(fd.reduce((s,v)=>s+v,0)/fd.length/128*100,100)+'%';
-    if(progress<1) animId=requestAnimationFrame(animate);
-    else setTimeout(()=>stopAll(),300);
+
+    // Volume meter
+    const fd=new Uint8Array(bufLen);
+    analyser.getByteFrequencyData(fd);
+    const avg=fd.reduce((s,v)=>s+v,0)/fd.length;
+    document.getElementById('vol-bar').style.width=Math.min(avg/128*100,100)+'%';
+
+    if(progress < 1) animId=requestAnimationFrame(animate);
+    else setTimeout(()=>stopAll(), 400);
   }
-  animId=requestAnimationFrame(animate);
+  animId = requestAnimationFrame(animate);
 }
 
 initDraw(); loadPreset(); updateXAxis();
