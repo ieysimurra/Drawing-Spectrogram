@@ -202,6 +202,16 @@
       letter-spacing: 1px; transition: all .2s; text-transform: uppercase; margin-top: 6px;
     }
     .stop-btn:hover { border-color: var(--accent2); color: var(--accent); }
+    .export-btn {
+      width: 100%; height: 36px; background: transparent;
+      border: 1px solid #1a4030; border-radius: 6px; color: #50a880;
+      font-family: var(--mono); font-size: 10px; cursor: pointer;
+      letter-spacing: 1px; transition: all .2s; text-transform: uppercase; margin-top: 6px;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .export-btn:hover { border-color: #50e3c2; color: #50e3c2; background: #051a12; }
+    .export-btn:disabled { opacity: .35; cursor: not-allowed; }
+    .export-btn.rendering { border-color: #f5a623; color: #f5a623; background: #1a1000; }
 
     .wave-c { width: 100%; height: 44px; background: var(--bg2); border-radius: 5px; border: 1px solid #1a1430; display: block; }
     .volwrap { height: 4px; background: #1a1430; border-radius: 2px; overflow: hidden; margin-top: 6px; }
@@ -460,6 +470,9 @@
           <span id="play-icon">▶</span><span id="play-lbl">reproduzir</span>
         </button>
         <button class="stop-btn" onclick="stopAll()">■ parar</button>
+        <button class="export-btn" id="export-btn" onclick="exportWav()">
+          <span id="export-icon">↓</span><span id="export-lbl">baixar .wav</span>
+        </button>
       </div>
     </div>
   </div>
@@ -1008,6 +1021,133 @@ function startPlay(){
     else setTimeout(()=>stopAll(), 400);
   }
   animId = requestAnimationFrame(animate);
+}
+
+// ── WAV Export ──
+function exportWav(){
+  const btn = document.getElementById('export-btn');
+  const lbl = document.getElementById('export-lbl');
+  const ico = document.getElementById('export-icon');
+
+  // Read pixel data
+  let data = pixelBuffer;
+  if(!data){
+    try { data = dctx.getImageData(0,0,W,H); } catch(e){ data=null; }
+  }
+  if(!data){ alert('Nenhum conteúdo para exportar.'); return; }
+
+  btn.disabled = true;
+  btn.classList.add('rendering');
+  ico.textContent = '↻';
+  lbl.textContent = 'renderizando…';
+
+  const sampleRate = 44100;
+  const dur = P.dur;
+  const totalSamples = Math.ceil(sampleRate * dur);
+  const wtype = WAVES[Math.round(P.wave)];
+  const attSec = P.att / 1000;
+  const secPerCol = dur / W;
+  const noteDur = Math.max(secPerCol * 4, 0.055);
+
+  // OfflineAudioContext renders audio faster than real-time, no playback
+  const offlineCtx = new OfflineAudioContext(2, totalSamples, sampleRate);
+  const offMaster = offlineCtx.createGain();
+  offMaster.gain.value = P.amp * 0.8;
+  offMaster.connect(offlineCtx.destination);
+
+  // Schedule all columns into the offline context
+  for(let col = 0; col < W; col++){
+    const tStart = (col / W) * dur;
+    for(let row = 0; row < H; row += 3){
+      const i = (row * W + col) * 4;
+      const r = data.data[i], g = data.data[i+1], b = data.data[i+2];
+      const br = (r*0.299 + g*0.587 + b*0.114) / 255;
+      if(br < 0.04) continue;
+      const freq = yToFreq(row);
+      if(freq < 20 || freq > 20000) continue;
+      const amp = Math.min(0.15, br * 0.20);
+      const atkT = Math.min(attSec, noteDur * 0.2);
+      const relT = Math.min(0.03, noteDur * 0.25);
+      const osc = offlineCtx.createOscillator();
+      const gn  = offlineCtx.createGain();
+      osc.type = wtype;
+      osc.frequency.value = freq;
+      gn.gain.setValueAtTime(0, tStart);
+      gn.gain.linearRampToValueAtTime(amp, tStart + atkT);
+      gn.gain.setValueAtTime(amp, tStart + noteDur - relT);
+      gn.gain.linearRampToValueAtTime(0, tStart + noteDur);
+      osc.connect(gn);
+      gn.connect(offMaster);
+      osc.start(tStart);
+      osc.stop(tStart + noteDur + 0.005);
+    }
+  }
+
+  offlineCtx.startRendering().then(renderedBuffer => {
+    const wav = audioBufferToWav(renderedBuffer);
+    const blob = new Blob([wav], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'espectrograma-' + Date.now() + '.wav';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    btn.disabled = false;
+    btn.classList.remove('rendering');
+    ico.textContent = '✓';
+    lbl.textContent = 'baixado!';
+    setTimeout(()=>{ ico.textContent='↓'; lbl.textContent='baixar .wav'; }, 3000);
+  }).catch(err => {
+    console.error('Render failed:', err);
+    btn.disabled = false;
+    btn.classList.remove('rendering');
+    ico.textContent = '↓';
+    lbl.textContent = 'baixar .wav';
+    alert('Erro ao renderizar: ' + err.message);
+  });
+}
+
+// Encode AudioBuffer → WAV ArrayBuffer (PCM 16-bit stereo)
+function audioBufferToWav(buffer){
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate  = buffer.sampleRate;
+  const numSamples  = buffer.length;
+  const bytesPerSample = 2; // 16-bit
+  const blockAlign  = numChannels * bytesPerSample;
+  const dataSize    = numSamples * blockAlign;
+  const bufSize     = 44 + dataSize;
+  const ab = new ArrayBuffer(bufSize);
+  const view = new DataView(ab);
+
+  function writeStr(o, s){ for(let i=0;i<s.length;i++) view.setUint8(o+i, s.charCodeAt(i)); }
+  function writeU32(o, v){ view.setUint32(o, v, true); }
+  function writeU16(o, v){ view.setUint16(o, v, true); }
+
+  // RIFF header
+  writeStr(0,  'RIFF');
+  writeU32(4,  36 + dataSize);
+  writeStr(8,  'WAVE');
+  writeStr(12, 'fmt ');
+  writeU32(16, 16);           // chunk size
+  writeU16(20, 1);            // PCM
+  writeU16(22, numChannels);
+  writeU32(24, sampleRate);
+  writeU32(28, sampleRate * blockAlign);
+  writeU16(32, blockAlign);
+  writeU16(34, 16);           // bits per sample
+  writeStr(36, 'data');
+  writeU32(40, dataSize);
+
+  // Interleave channels as 16-bit signed int
+  let offset = 44;
+  for(let i = 0; i < numSamples; i++){
+    for(let ch = 0; ch < numChannels; ch++){
+      const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+      view.setInt16(offset, sample < 0 ? sample * 32768 : sample * 32767, true);
+      offset += 2;
+    }
+  }
+  return ab;
 }
 
 // ── Image transforms ──
