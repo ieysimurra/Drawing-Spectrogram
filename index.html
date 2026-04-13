@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Espectrograma Sonoro · NICS/UNICAMP</title>
+  <meta name="description" content="Aplicativo interativo de espectrograma sonoro para visualização e síntese. Desenhe, importe imagens e ouça o resultado como som.">
+  <meta name="author" content="Prof. Ivan Simurra · NICS/UNICAMP">
+  <meta property="og:title" content="Espectrograma Sonoro · NICS/UNICAMP">
+  <meta property="og:description" content="Desenhe ou importe imagens e ouça como espectrograma sonoro interativo.">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0a0f;
+      --bg1:      #0f0f1a;
+      --bg2:      #07070d;
+      --border:   #2a2040;
+      --border2:  #1e1630;
+      --accent:   #c8b8ff;
+      --accent2:  #8860e0;
+      --muted:    #5a4c78;
+      --muted2:   #3d2f5c;
+      --text:     #e8e4f0;
+      --pink:     #ff5f8f;
+      --mono:     'Space Mono', monospace;
+      --sans:     'Syne', sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,10,15,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border2);
+      padding: 0 24px;
+      display: flex; align-items: center; gap: 24px; height: 52px;
+    }
+    .nav-logo { font-size: 15px; font-weight: 800; color: var(--accent); letter-spacing: -.3px; flex: 1; }
+    .nav-logo span { color: var(--muted); font-weight: 400; font-family: var(--mono); font-size: 11px; margin-left: 8px; }
+    .nav-links { display: flex; gap: 0; }
+    .nav-links a {
+      padding: 0 14px; height: 52px; display: flex; align-items: center;
+      font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted); text-decoration: none;
+      transition: color .15s; border-bottom: 2px solid transparent;
+    }
+    .nav-links a:hover { color: var(--accent); }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 80px 24px 64px;
+      max-width: 800px; margin: 0 auto; text-align: center;
+    }
+    .hero-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      background: #1a1040; border: 1px solid #3d2880;
+      font-family: var(--mono); font-size: 10px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: clamp(32px, 6vw, 56px); font-weight: 800;
+      line-height: 1.05; letter-spacing: -1.5px; margin-bottom: 20px;
+      color: #fff;
+    }
+    .hero h1 em { font-style: normal; color: var(--accent); }
+    .hero p {
+      font-size: 17px; color: #8878a8; max-width: 560px; margin: 0 auto 36px;
+      line-height: 1.7;
+    }
+    .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      padding: 12px 28px; border-radius: 8px;
+      background: linear-gradient(135deg, #3d1a70, #6b1a9c);
+      color: #e8d8ff; font-family: var(--sans); font-size: 14px; font-weight: 600;
+      text-decoration: none; letter-spacing: .3px;
+      transition: filter .2s, transform .2s;
+    }
+    .btn-primary:hover { filter: brightness(1.2); transform: translateY(-2px); }
+    .btn-outline {
+      padding: 12px 28px; border-radius: 8px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); font-family: var(--mono); font-size: 11px;
+      text-decoration: none; letter-spacing: .5px; text-transform: uppercase;
+      transition: border-color .2s, color .2s;
+    }
+    .btn-outline:hover { border-color: var(--accent2); color: var(--accent); }
+
+    /* ── APP EMBED SECTION ── */
+    #app {
+      background: #07070d;
+      border-top: 1px solid var(--border2);
+      border-bottom: 1px solid var(--border2);
+      padding: 40px 20px;
+    }
+    #app .section-title {
+      text-align: center; margin-bottom: 28px;
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 2px; color: var(--muted);
+    }
+
+    /* ── APP CONTAINER ── */
+    .app-wrap {
+      max-width: 980px; margin: 0 auto;
+    }
+    .app-hdr {
+      display: flex; align-items: baseline; gap: 12px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border2); padding-bottom: 12px;
+    }
+    .app-hdr-title { font-size: 21px; font-weight: 800; color: var(--accent); letter-spacing: -.5px; }
+    .app-hdr-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+    .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .tab {
+      padding: 6px 16px; background: var(--bg1); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--muted); font-family: var(--mono);
+      font-size: 11px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+      transition: all .15s;
+    }
+    .tab.active { background: #1a1040; color: var(--accent); border-color: #7050c0; }
+
+    .panels { display: grid; grid-template-columns: 1fr 200px; gap: 14px; align-items: start; }
+
+    .left { display: flex; flex-direction: column; gap: 10px; }
+
+    .toolbar {
+      display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+      padding: 8px 10px; background: var(--bg1); border: 1px solid var(--border); border-radius: 8px;
+    }
+    .tbtn {
+      height: 30px; padding: 0 10px; background: transparent; border: 1px solid var(--border);
+      border-radius: 5px; color: #8870c0; font-family: var(--mono); font-size: 10px;
+      cursor: pointer; display: flex; align-items: center; gap: 5px;
+      text-transform: uppercase; letter-spacing: .5px; transition: all .15s; white-space: nowrap;
+    }
+    .tbtn:hover { background: #1a1430; color: var(--accent); border-color: #5a4090; }
+    .tbtn.active { background: #2a1860; color: var(--accent); border-color: var(--accent2); }
+    .swatch {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid transparent; cursor: pointer; transition: transform .15s, border-color .15s;
+    }
+    .swatch:hover { transform: scale(1.2); }
+    .swatch.active { border-color: #fff; transform: scale(1.15); }
+    .tsep { width: 1px; height: 22px; background: var(--border); margin: 0 3px; }
+
+    .view-area {
+      position: relative; background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden;
+    }
+    #draw-canvas { display: block; cursor: crosshair; width: 100%; image-rendering: pixelated; }
+    #spec-canvas { display: none; width: 100%; image-rendering: pixelated; }
+    #playhead {
+      position: absolute; top: 0; bottom: 0; width: 2px; background: var(--pink);
+      left: 0; display: none; pointer-events: none; z-index: 20;
+      box-shadow: 0 0 6px #ff5f8f99;
+    }
+    .yaxis { position: absolute; left: 0; top: 0; width: 38px; height: 100%; pointer-events: none; z-index: 10; }
+
+    .xaxis { display: flex; justify-content: space-between; padding: 3px 4px 0; margin-left: 38px; }
+    .tick { font-size: 10px; font-family: var(--mono); color: var(--muted2); }
+
+    .statusbar { display: flex; gap: 14px; font-size: 10px; font-family: var(--mono); color: var(--muted2); padding: 4px 2px; }
+    .slive { color: #8870c0; }
+
+    .right { display: flex; flex-direction: column; gap: 12px; }
+    .card { background: var(--bg1); border: 1px solid var(--border); border-radius: 10px; padding: 13px; }
+    .card-title { font-size: 10px; font-family: var(--mono); color: #4a3c68; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 11px; }
+    .prow { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .plabel { font-size: 11px; color: #7860a8; font-family: var(--mono); }
+    .pval { font-size: 12px; font-weight: 600; color: var(--accent); font-family: var(--mono); }
+    .pslider { width: 100%; accent-color: var(--accent2); margin: 0 0 10px; }
+
+    .play-btn {
+      width: 100%; height: 42px;
+      background: linear-gradient(135deg, #3d1a70, #6b1a9c);
+      border: none; border-radius: 8px; color: #e8d8ff;
+      font-family: var(--sans); font-size: 14px; font-weight: 600;
+      cursor: pointer; letter-spacing: .5px; transition: all .2s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .play-btn:hover { filter: brightness(1.2); transform: translateY(-1px); }
+    .play-btn.playing { background: linear-gradient(135deg, #700a3a, #9c1a5a); }
+    .stop-btn {
+      width: 100%; height: 32px; background: transparent;
+      border: 1px solid #3d2050; border-radius: 6px; color: #7860a8;
+      font-family: var(--mono); font-size: 10px; cursor: pointer;
+      letter-spacing: 1px; transition: all .2s; text-transform: uppercase; margin-top: 6px;
+    }
+    .stop-btn:hover { border-color: var(--accent2); color: var(--accent); }
+
+    .wave-c { width: 100%; height: 44px; background: var(--bg2); border-radius: 5px; border: 1px solid #1a1430; display: block; }
+    .volwrap { height: 4px; background: #1a1430; border-radius: 2px; overflow: hidden; margin-top: 6px; }
+    .volbar { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--pink)); border-radius: 2px; width: 0%; transition: width .05s; }
+    .synth-grid { background: var(--bg2); border: 1px solid #1a1430; border-radius: 5px; padding: 8px; display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+    .sg-row { display: flex; justify-content: space-between; font-size: 10px; font-family: var(--mono); }
+    .sg-k { color: #4a3c68; } .sg-v { color: #a090d0; }
+
+    .import-drop {
+      border: 1.5px dashed var(--border); border-radius: 6px; padding: 10px 8px;
+      text-align: center; font-size: 10px; font-family: var(--mono); color: #4a3c68;
+      cursor: pointer; transition: all .2s; line-height: 1.7;
+    }
+    .import-drop:hover { border-color: #5a4090; color: #8870c0; background: #0f0a1a; }
+    #file-input { display: none; }
+    .convert-btn {
+      width: 100%; height: 36px; background: transparent;
+      border: 1px solid #3d2050; border-radius: 6px; color: #a080d0;
+      font-family: var(--mono); font-size: 10px; cursor: pointer;
+      letter-spacing: 1px; transition: all .2s; text-transform: uppercase; margin-top: 4px;
+    }
+    .convert-btn:hover { border-color: var(--accent2); color: var(--accent); background: #1a1040; }
+
+    .tips { background: var(--bg1); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 12px; margin-top: 4px; }
+    .tip-row { font-size: 11px; font-family: var(--mono); color: #4a3c68; margin-bottom: 4px; line-height: 1.5; }
+    .tip-row span { color: #8870a8; }
+
+    /* ── DOCS SECTION ── */
+    .section {
+      max-width: 800px; margin: 0 auto;
+      padding: 72px 24px;
+    }
+    .section-label {
+      font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 2px; color: var(--muted2); margin-bottom: 12px;
+    }
+    .section h2 {
+      font-size: 28px; font-weight: 800; letter-spacing: -.5px;
+      color: #fff; margin-bottom: 20px; line-height: 1.2;
+    }
+    .section p { color: #8878a8; font-size: 16px; margin-bottom: 16px; line-height: 1.75; }
+    .section h3 { font-size: 17px; font-weight: 600; color: var(--accent); margin: 32px 0 12px; }
+
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px; margin: 32px 0;
+    }
+    .feature-card {
+      background: var(--bg1); border: 1px solid var(--border);
+      border-radius: 10px; padding: 18px;
+    }
+    .feature-icon { font-size: 22px; margin-bottom: 10px; }
+    .feature-card h4 { font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 6px; }
+    .feature-card p { font-size: 13px; color: var(--muted); line-height: 1.6; margin: 0; }
+
+    .code-block {
+      background: #050508; border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px 20px;
+      font-family: var(--mono); font-size: 13px; color: #c8b8e8;
+      overflow-x: auto; margin: 16px 0; line-height: 1.7;
+    }
+    .code-block .c { color: #5a4c78; }
+    .code-block .k { color: var(--pink); }
+    .code-block .s { color: #50e3c2; }
+    .code-block .v { color: #f5a623; }
+
+    table.ref-table {
+      width: 100%; border-collapse: collapse; margin: 20px 0;
+      font-family: var(--mono); font-size: 12px;
+    }
+    .ref-table th {
+      text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border);
+      color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-size: 10px;
+    }
+    .ref-table td {
+      padding: 8px 12px; border-bottom: 1px solid var(--border2);
+      color: #8878a8; vertical-align: top;
+    }
+    .ref-table td:first-child { color: var(--accent); font-weight: 700; }
+    .ref-table tr:hover td { background: var(--bg1); }
+
+    .divider { border: none; border-top: 1px solid var(--border2); margin: 0; }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border2); padding: 32px 24px;
+      text-align: center; font-family: var(--mono); font-size: 11px; color: var(--muted2);
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--accent); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 720px) {
+      .panels { grid-template-columns: 1fr; }
+      .right { display: grid; grid-template-columns: 1fr 1fr; }
+      .play-btn, .stop-btn { grid-column: 1/-1; }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">espectrograma sonoro <span>NICS/UNICAMP</span></div>
+  <div class="nav-links">
+    <a href="#app">aplicativo</a>
+    <a href="#sobre">sobre</a>
+    <a href="#como-usar">como usar</a>
+    <a href="#referencia">referência</a>
+    <a href="https://github.com/ivanSimurra/espectrograma-sonoro" target="_blank">github ↗</a>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-badge">criação musical · novos suportes tecnológicos</div>
+  <h1>Visualize e ouça<br><em>o espectro do som</em></h1>
+  <p>Desenhe livremente ou importe uma imagem e ouça o resultado como síntese sonora em tempo real — frequência, timbre e intensidade mapeados pixel a pixel.</p>
+  <div class="hero-btns">
+    <a href="#app" class="btn-primary">▶ abrir aplicativo</a>
+    <a href="https://github.com/ivanSimurra/espectrograma-sonoro" class="btn-outline" target="_blank">ver no github</a>
+  </div>
+</section>
+
+<!-- ── APP ── -->
+<section id="app">
+  <div class="section-title">▸ aplicativo interativo</div>
+  <div class="app-wrap">
+
+    <div class="app-hdr">
+      <div class="app-hdr-title">espectrograma sonoro</div>
+      <div class="app-hdr-sub">unicamp · nics · criação musical</div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" id="tab-draw" onclick="switchTab('draw')">✏ desenhar</button>
+      <button class="tab" id="tab-spec" onclick="switchTab('spec')">◈ espectrograma</button>
+    </div>
+
+    <div class="panels">
+      <div class="left">
+
+        <div class="toolbar" id="draw-toolbar">
+          <button class="tbtn active" id="mode-draw" onclick="setMode('draw')">✏ pincel</button>
+          <button class="tbtn" id="mode-erase" onclick="setMode('erase')">◻ apagar</button>
+          <button class="tbtn" id="mode-line" onclick="setMode('line')">╱ linha</button>
+          <div class="tsep"></div>
+          <div class="swatch active" style="background:#ff5f8f" onclick="setColor(this,'#ff5f8f')"></div>
+          <div class="swatch" style="background:#f5a623" onclick="setColor(this,'#f5a623')"></div>
+          <div class="swatch" style="background:#50e3c2" onclick="setColor(this,'#50e3c2')"></div>
+          <div class="swatch" style="background:#5b8cff" onclick="setColor(this,'#5b8cff')"></div>
+          <div class="swatch" style="background:#c8b8ff" onclick="setColor(this,'#c8b8ff')"></div>
+          <div class="swatch" style="background:#ffffff" onclick="setColor(this,'#ffffff')"></div>
+          <div class="tsep"></div>
+          <span style="font-size:10px;font-family:var(--mono);color:var(--muted)">tam</span>
+          <input type="range" style="width:70px;accent-color:var(--accent2)" id="brush-sz" min="1" max="22" value="7"
+                 oninput="brushSize=+this.value;document.getElementById('bsz-v').textContent=this.value">
+          <span id="bsz-v" style="font-size:10px;font-family:var(--mono);color:#8870c0;min-width:18px">7</span>
+          <div class="tsep"></div>
+          <button class="tbtn" onclick="clearDraw()">🗑 limpar</button>
+          <button class="tbtn" onclick="loadPreset()">✦ exemplo</button>
+        </div>
+
+        <div class="toolbar" id="spec-toolbar" style="display:none">
+          <span style="font-size:10px;font-family:var(--mono);color:var(--muted)">paleta</span>
+          <button class="tbtn active" id="pal-inferno" onclick="setPalette('inferno',this)">inferno</button>
+          <button class="tbtn" id="pal-turbo" onclick="setPalette('turbo',this)">turbo</button>
+          <button class="tbtn" id="pal-viridis" onclick="setPalette('viridis',this)">viridis</button>
+          <button class="tbtn" id="pal-cyan" onclick="setPalette('cyan',this)">ciano</button>
+          <div class="tsep"></div>
+          <button class="tbtn" onclick="renderSpec()">↺ re-renderizar</button>
+        </div>
+
+        <div class="view-area" id="view-area">
+          <canvas id="draw-canvas" width="720" height="300"></canvas>
+          <canvas id="spec-canvas" width="720" height="300"></canvas>
+          <div id="playhead"></div>
+          <canvas class="yaxis" id="yaxis-c" width="38" height="300"></canvas>
+        </div>
+
+        <div class="xaxis">
+          <span class="tick">0s</span><span class="tick">0.5s</span><span class="tick">1s</span>
+          <span class="tick">1.5s</span><span class="tick">2s</span><span class="tick">2.5s</span><span class="tick">3s</span>
+        </div>
+
+        <div class="statusbar">
+          <div>pos: <span class="slive" id="s-pos">—</span></div>
+          <div>freq: <span class="slive" id="s-freq">—</span></div>
+          <div>tempo: <span class="slive" id="s-time">—</span></div>
+          <div>pixels: <span class="slive" id="s-pix">0</span></div>
+        </div>
+
+        <div class="tips" id="draw-tips">
+          <div class="tip-row"><span>Y</span> = frequência · topo=agudo · base=grave (escala log)</div>
+          <div class="tip-row"><span>X</span> = tempo · esquerda→direita</div>
+          <div class="tip-row"><span>brilho</span> = intensidade · linhas diagonais = glissando</div>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="card">
+          <div class="card-title">importar imagem</div>
+          <div class="import-drop" onclick="document.getElementById('file-input').click()">
+            📂 clique para carregar<br><span style="color:#3a3050">.jpg · .png · .gif</span>
+          </div>
+          <input type="file" id="file-input" accept="image/*" onchange="importImage(event)">
+          <button class="convert-btn" onclick="switchTab('spec');renderSpec()">◈ ver espectrograma</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">síntese</div>
+          <div class="prow"><span class="plabel">duração</span><span class="pval" id="pv-dur">3.0s</span></div>
+          <input class="pslider" type="range" min="1" max="8" step=".5" value="3"
+                 oninput="P.dur=+this.value;document.getElementById('pv-dur').textContent=parseFloat(this.value).toFixed(1)+'s';updateXAxis()">
+          <div class="prow"><span class="plabel">freq. base</span><span class="pval" id="pv-flo">80Hz</span></div>
+          <input class="pslider" type="range" min="40" max="500" step="10" value="80"
+                 oninput="P.flo=+this.value;document.getElementById('pv-flo').textContent=this.value+'Hz';drawYAxis()">
+          <div class="prow"><span class="plabel">freq. topo</span><span class="pval" id="pv-fhi">4kHz</span></div>
+          <input class="pslider" type="range" min="500" max="10000" step="100" value="4000"
+                 oninput="P.fhi=+this.value;document.getElementById('pv-fhi').textContent=(this.value>=1000?(this.value/1000).toFixed(1)+'kHz':this.value+'Hz');drawYAxis()">
+          <div class="prow"><span class="plabel">onda</span><span class="pval" id="pv-wave">sine</span></div>
+          <input class="pslider" type="range" min="0" max="3" step="1" value="0"
+                 oninput="P.wave=+this.value;document.getElementById('pv-wave').textContent=['sine','triangle','square','sawtooth'][+this.value]">
+          <div class="prow"><span class="plabel">ataque</span><span class="pval" id="pv-att">10ms</span></div>
+          <input class="pslider" type="range" min="1" max="150" step="1" value="10"
+                 oninput="P.att=+this.value;document.getElementById('pv-att').textContent=this.value+'ms'">
+        </div>
+
+        <div class="card">
+          <div class="card-title">monitor</div>
+          <canvas class="wave-c" id="wave-c"></canvas>
+          <div class="volwrap"><div class="volbar" id="vol-bar"></div></div>
+          <div class="synth-grid">
+            <div class="sg-row"><span class="sg-k">estado</span><span class="sg-v" id="m-state">pronto</span></div>
+            <div class="sg-row"><span class="sg-k">progresso</span><span class="sg-v" id="m-prog">0%</span></div>
+            <div class="sg-row"><span class="sg-k">col atual</span><span class="sg-v" id="m-col">—</span></div>
+            <div class="sg-row"><span class="sg-k">freq atual</span><span class="sg-v" id="m-freq">—</span></div>
+          </div>
+        </div>
+
+        <button class="play-btn" id="play-btn" onclick="togglePlay()">
+          <span id="play-icon">▶</span><span id="play-lbl">reproduzir</span>
+        </button>
+        <button class="stop-btn" onclick="stopAll()">■ parar</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SOBRE ── -->
+<hr class="divider">
+<section class="section" id="sobre">
+  <div class="section-label">sobre o projeto</div>
+  <h2>Espectrograma como interface pedagógica</h2>
+  <p>Este aplicativo foi desenvolvido como ferramenta didática para a disciplina <strong style="color:var(--accent)">Criação Musical com Novos Suportes Tecnológicos</strong> (UNICAMP/NICS), permitindo que estudantes explorem visualmente a relação entre representação espectral e síntese sonora.</p>
+  <p>A proposta central é tornar o espectrograma — normalmente uma representação de análise — em uma <em>superfície de criação</em>: o aluno desenha, e o sistema sintetiza. Isso inverte o fluxo analítico tradicional e abre espaço para experimentação composicional intuitiva.</p>
+
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon">✏️</div>
+      <h4>Desenho livre</h4>
+      <p>Pincéis coloridos mapeados a frequências. Intensidade pelo brilho do pixel.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📂</div>
+      <h4>Importação de imagem</h4>
+      <p>Qualquer .jpg ou .png vira espectrograma tocável. Rostos, texturas, pinturas.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">◈</div>
+      <h4>Visualização heatmap</h4>
+      <p>Paletas inferno, turbo, viridis e ciano — como espectrogramas científicos reais.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔊</div>
+      <h4>Síntese aditiva</h4>
+      <p>Web Audio API. Osciladores por coluna com envelope ADSR e 4 tipos de onda.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── COMO USAR ── -->
+<hr class="divider">
+<section class="section" id="como-usar">
+  <div class="section-label">como usar</div>
+  <h2>Guia rápido de uso</h2>
+
+  <h3>1. Desenhar e ouvir</h3>
+  <p>Use os pincéis coloridos para desenhar no canvas. Cada posição vertical corresponde a uma frequência (escala logarítmica). Posição horizontal = tempo. Clique em <strong style="color:var(--accent)">▶ reproduzir</strong> para ouvir o resultado.</p>
+
+  <h3>2. Linhas harmônicas</h3>
+  <p>Selecione o modo <strong style="color:var(--accent)">╱ linha</strong> e arraste para criar harmônicos paralelos, glissandos ou melodias. Linhas diagonais produzem glissandos; horizontais produzem notas sustentadas.</p>
+
+  <h3>3. Importar imagem</h3>
+  <p>Clique em <strong style="color:var(--accent)">📂 importar .jpg</strong>, escolha qualquer imagem. Em seguida clique em <strong style="color:var(--accent)">◈ ver espectrograma</strong> para visualizar com paleta científica e reproduzir.</p>
+
+  <h3>4. Ajustar parâmetros</h3>
+  <p>No painel lateral, controle duração total, faixa de frequências (grave/agudo), tipo de onda (senoidal, triangular, quadrada, dente-de-serra) e tempo de ataque de cada oscilador.</p>
+
+  <h3>5. Paletas de cor</h3>
+  <p>Na aba <strong style="color:var(--accent)">◈ espectrograma</strong>, escolha entre as paletas <em>inferno</em>, <em>turbo</em>, <em>viridis</em> ou <em>ciano</em> para diferentes representações visuais da mesma informação espectral.</p>
+</section>
+
+<!-- ── REFERÊNCIA TÉCNICA ── -->
+<hr class="divider">
+<section class="section" id="referencia">
+  <div class="section-label">referência técnica</div>
+  <h2>Arquitetura e parâmetros</h2>
+
+  <h3>Mapeamento espectral</h3>
+  <table class="ref-table">
+    <tr><th>Dimensão</th><th>Mapeamento</th><th>Escala</th></tr>
+    <tr><td>Eixo X</td><td>Tempo (0 → duração)</td><td>Linear</td></tr>
+    <tr><td>Eixo Y</td><td>Frequência (base → topo)</td><td>Logarítmica</td></tr>
+    <tr><td>Brilho (R+G+B)</td><td>Amplitude do oscilador</td><td>Linear 0–1</td></tr>
+    <tr><td>Cor do pixel</td><td>Timbre / textura visual</td><td>—</td></tr>
+  </table>
+
+  <h3>Síntese</h3>
+  <table class="ref-table">
+    <tr><th>Parâmetro</th><th>Faixa</th><th>Padrão</th></tr>
+    <tr><td>Duração</td><td>1 – 8 segundos</td><td>3s</td></tr>
+    <tr><td>Frequência base</td><td>40 – 500 Hz</td><td>80 Hz</td></tr>
+    <tr><td>Frequência topo</td><td>500 – 10.000 Hz</td><td>4.000 Hz</td></tr>
+    <tr><td>Tipo de onda</td><td>sine · triangle · square · sawtooth</td><td>sine</td></tr>
+    <tr><td>Ataque</td><td>1 – 150 ms</td><td>10 ms</td></tr>
+    <tr><td>Amostragem</td><td>A cada 3 colunas, 4 linhas</td><td>—</td></tr>
+  </table>
+
+  <h3>Dependências</h3>
+  <div class="code-block">
+<span class="c"># Nenhuma dependência externa!</span>
+<span class="c"># Apenas APIs nativas do navegador:</span>
+
+Web Audio API      <span class="c">→ síntese sonora (OscillatorNode, GainNode, AnalyserNode)</span>
+Canvas 2D API      <span class="c">→ desenho e leitura de pixels (getImageData, putImageData)</span>
+requestAnimationFrame <span class="c">→ sincronização playhead ↔ AudioContext.currentTime</span>
+FileReader API     <span class="c">→ importação de imagens locais</span>
+  </div>
+
+  <h3>Estrutura do repositório</h3>
+  <div class="code-block">
+espectrograma-sonoro/
+├── <span class="v">index.html</span>        <span class="c">← aplicativo + documentação (este arquivo)</span>
+├── <span class="v">README.md</span>         <span class="c">← documentação para o GitHub</span>
+├── <span class="v">LICENSE</span>           <span class="c">← MIT License</span>
+└── docs/
+    └── <span class="v">screenshots/</span>  <span class="c">← imagens para o README</span>
+  </div>
+
+  <h3>Instalar e rodar localmente</h3>
+  <div class="code-block">
+<span class="c"># Clone o repositório</span>
+<span class="k">git clone</span> <span class="s">https://github.com/ivanSimurra/espectrograma-sonoro.git</span>
+<span class="k">cd</span> espectrograma-sonoro
+
+<span class="c"># Abrir direto no navegador (não precisa de servidor)</span>
+<span class="k">open</span> index.html
+
+<span class="c"># Ou com um servidor local simples</span>
+<span class="k">python3 -m http.server</span> <span class="v">8080</span>
+<span class="c"># Acesse: http://localhost:8080</span>
+  </div>
+
+  <h3>GitHub Pages</h3>
+  <div class="code-block">
+<span class="c"># Ativar no repositório:</span>
+<span class="c"># Settings → Pages → Source: Deploy from branch → main → / (root)</span>
+
+<span class="c"># URL pública ficará disponível em:</span>
+<span class="s">https://ivanSimurra.github.io/espectrograma-sonoro/</span>
+  </div>
+</section>
+
+<hr class="divider">
+<footer>
+  <p style="margin-bottom:8px">
+    Desenvolvido por <a href="#">Prof. Ivan Simurra</a> ·
+    <a href="https://www.nics.unicamp.br" target="_blank">NICS/UNICAMP</a> ·
+    Criação Musical com Novos Suportes Tecnológicos · 2026
+  </p>
+  <p>
+    Licença <a href="LICENSE">MIT</a> ·
+    <a href="https://github.com/ivanSimurra/espectrograma-sonoro" target="_blank">github.com/ivanSimurra/espectrograma-sonoro</a>
+  </p>
+</footer>
+
+<!-- ══════════════════════════════════════════
+     APP JAVASCRIPT
+══════════════════════════════════════════ -->
+<script>
+const W=720, H=300;
+const drawCanvas=document.getElementById('draw-canvas');
+const dctx=drawCanvas.getContext('2d');
+const specCanvas=document.getElementById('spec-canvas');
+const sctx=specCanvas.getContext('2d');
+const yaxisC=document.getElementById('yaxis-c');
+const yctx=yaxisC.getContext('2d');
+const waveC=document.getElementById('wave-c');
+const wctx=waveC.getContext('2d');
+
+let painting=false, drawMode='draw', currentColor='#ff5f8f', brushSize=7;
+let lineStart=null, palette='inferno', currentTab='draw';
+let P={dur:3,flo:80,fhi:4000,wave:0,att:10};
+const WAVES=['sine','triangle','square','sawtooth'];
+let audioCtx=null, analyser=null, playing=false;
+let scheduledOscs=[], playStartTime=0, animId=null;
+
+function initDraw(){
+  dctx.fillStyle='#07070d';
+  dctx.fillRect(0,0,W,H);
+  drawYAxis();
+}
+
+function drawYAxis(){
+  yctx.clearRect(0,0,38,H);
+  yctx.fillStyle='#07070d';
+  yctx.fillRect(0,0,38,H);
+  [P.fhi,2000,1000,500,200,P.flo].forEach(f=>{
+    if(f<P.flo||f>P.fhi) return;
+    const y=freqToY(f);
+    yctx.fillStyle='#2d2050';
+    yctx.fillRect(32,y,6,1);
+    yctx.fillStyle='#5a4c78';
+    yctx.font='9px Space Mono,monospace';
+    yctx.textAlign='right';
+    yctx.fillText(f>=1000?(f/1000).toFixed(f%1000===0?0:1)+'k':f+'',30,y+3);
+  });
+  yctx.fillStyle='#2d2050';
+  yctx.fillRect(36,0,1,H);
+}
+
+function freqToY(f){ const lo=Math.log(P.flo),hi=Math.log(P.fhi); return Math.round((1-(Math.log(f)-lo)/(hi-lo))*H); }
+function yToFreq(y){ const lo=Math.log(P.flo),hi=Math.log(P.fhi); return Math.exp(lo+(1-y/H)*(hi-lo)); }
+
+function updateXAxis(){
+  const ticks=document.querySelectorAll('.tick');
+  ticks.forEach((t,i)=>{ const v=(i/(ticks.length-1))*P.dur; t.textContent=v%1===0?v+'s':v.toFixed(1)+'s'; });
+}
+
+function switchTab(tab){
+  currentTab=tab;
+  document.getElementById('tab-draw').classList.toggle('active',tab==='draw');
+  document.getElementById('tab-spec').classList.toggle('active',tab==='spec');
+  drawCanvas.style.display=tab==='draw'?'block':'none';
+  specCanvas.style.display=tab==='spec'?'block':'none';
+  document.getElementById('draw-toolbar').style.display=tab==='draw'?'flex':'none';
+  document.getElementById('spec-toolbar').style.display=tab==='spec'?'flex':'none';
+  document.getElementById('draw-tips').style.display=tab==='draw'?'block':'none';
+  if(tab==='spec') renderSpec();
+}
+
+function getPaletteColor(t,pal){
+  t=Math.max(0,Math.min(1,t));
+  if(pal==='inferno'){
+    return [Math.round(Math.min(255,t<.5?t*2*200:200+(t-.5)*2*55)),
+            Math.round(t<.3?0:t<.7?(t-.3)/.4*180:(t-.7)/.3*75+180),
+            Math.round(t<.2?t*5*120:t<.5?120-(t-.2)/.3*120:0)];
+  }
+  if(pal==='turbo'){
+    const s=[[0,0,50],[0,0,255],[0,180,255],[0,255,128],[128,255,0],[255,200,0],[255,80,0],[180,0,0]];
+    const idx=t*(s.length-1),i=Math.floor(idx),f=idx-i,a=s[Math.min(i,s.length-1)],b=s[Math.min(i+1,s.length-1)];
+    return [Math.round(a[0]+(b[0]-a[0])*f),Math.round(a[1]+(b[1]-a[1])*f),Math.round(a[2]+(b[2]-a[2])*f)];
+  }
+  if(pal==='viridis'){
+    const s=[[68,1,84],[72,40,120],[62,83,160],[49,120,172],[38,153,177],[31,184,172],[53,213,158],[109,225,128],[180,222,105],[253,231,37]];
+    const idx=t*(s.length-1),i=Math.floor(idx),f=idx-i,a=s[Math.min(i,s.length-1)],b=s[Math.min(i+1,s.length-1)];
+    return [Math.round(a[0]+(b[0]-a[0])*f),Math.round(a[1]+(b[1]-a[1])*f),Math.round(a[2]+(b[2]-a[2])*f)];
+  }
+  if(pal==='cyan'){
+    return [Math.round(t<.5?0:((t-.5)*2)**.7*255),
+            Math.round(t<.3?t/.3*100:t<.7?100+(t-.3)/.4*155:255),
+            Math.round(t<.2?t/.2*180:t<.6?180+(t-.2)/.4*75:255-(t-.6)/.4*200)];
+  }
+  return [Math.round(t*255),Math.round(t*255),Math.round(t*255)];
+}
+
+function setPalette(p,btn){
+  palette=p;
+  document.querySelectorAll('#spec-toolbar .tbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderSpec();
+}
+
+function renderSpec(){
+  const src=dctx.getImageData(0,0,W,H);
+  const out=sctx.createImageData(W,H);
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const i=(y*W+x)*4;
+      const br=(src.data[i]*.299+src.data[i+1]*.587+src.data[i+2]*.114)/255;
+      const [r,g,b]=getPaletteColor(br,palette);
+      out.data[i]=r; out.data[i+1]=g; out.data[i+2]=b; out.data[i+3]=255;
+    }
+  }
+  sctx.putImageData(out,0,0);
+}
+
+function getXY(e){
+  const r=drawCanvas.getBoundingClientRect();
+  const ev=e.touches?e.touches[0]:e;
+  return [(ev.clientX-r.left)*(W/r.width),(ev.clientY-r.top)*(H/r.height)];
+}
+
+drawCanvas.addEventListener('mousedown',e=>{ painting=true; const [x,y]=getXY(e); if(drawMode==='line')lineStart={x,y}; else paint(x,y); });
+drawCanvas.addEventListener('mousemove',e=>{ const [x,y]=getXY(e); updateStatus(x,y); if(!painting||drawMode==='line')return; paint(x,y); });
+drawCanvas.addEventListener('mouseup',e=>{ if(drawMode==='line'&&lineStart){ const [x,y]=getXY(e); drawLineOp(lineStart.x,lineStart.y,x,y); lineStart=null; } painting=false; });
+drawCanvas.addEventListener('mouseleave',()=>{ painting=false; });
+drawCanvas.addEventListener('touchstart',e=>{ e.preventDefault(); painting=true; const [x,y]=getXY(e); paint(x,y); },{passive:false});
+drawCanvas.addEventListener('touchmove',e=>{ e.preventDefault(); if(!painting)return; const [x,y]=getXY(e); paint(x,y); },{passive:false});
+drawCanvas.addEventListener('touchend',()=>painting=false);
+
+function paint(x,y){
+  if(drawMode==='erase'){
+    dctx.globalCompositeOperation='source-over';
+    dctx.beginPath(); dctx.arc(x,y,brushSize*2.5,0,Math.PI*2);
+    dctx.fillStyle='#07070d'; dctx.fill();
+  } else {
+    dctx.globalCompositeOperation='screen';
+    const g=dctx.createRadialGradient(x,y,0,x,y,brushSize);
+    g.addColorStop(0,currentColor+'ff'); g.addColorStop(.4,currentColor+'cc'); g.addColorStop(1,currentColor+'00');
+    dctx.beginPath(); dctx.arc(x,y,brushSize,0,Math.PI*2); dctx.fillStyle=g; dctx.fill();
+    dctx.globalCompositeOperation='source-over';
+  }
+}
+
+function drawLineOp(x1,y1,x2,y2){
+  const steps=Math.ceil(Math.sqrt((x2-x1)**2+(y2-y1)**2)/(brushSize*.4));
+  for(let i=0;i<=steps;i++){ const t=i/steps; paint(x1+(x2-x1)*t,y1+(y2-y1)*t); }
+}
+
+function setMode(m){
+  drawMode=m;
+  ['draw','erase','line'].forEach(k=>document.getElementById('mode-'+k).classList.toggle('active',k===m));
+  drawCanvas.style.cursor=m==='erase'?'cell':'crosshair';
+}
+
+function setColor(el,c){
+  currentColor=c;
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function updateStatus(x,y){
+  const f=Math.round(yToFreq(y)),t=(x/W*P.dur).toFixed(2);
+  document.getElementById('s-pos').textContent=`${Math.round(x)},${Math.round(y)}`;
+  document.getElementById('s-freq').textContent=f>=1000?(f/1000).toFixed(2)+'kHz':f+'Hz';
+  document.getElementById('s-time').textContent=t+'s';
+  const d=dctx.getImageData(0,0,W,H).data;
+  let c=0; for(let i=0;i<d.length;i+=4)if(d[i]+d[i+1]+d[i+2]>30)c++;
+  document.getElementById('s-pix').textContent=c.toLocaleString();
+}
+
+function clearDraw(){ dctx.fillStyle='#07070d'; dctx.fillRect(0,0,W,H); sctx.fillStyle='#07070d'; sctx.fillRect(0,0,W,H); }
+
+function loadPreset(){
+  clearDraw();
+  dctx.globalCompositeOperation='screen';
+  dctx.beginPath(); dctx.moveTo(W*.05,H*.75); dctx.bezierCurveTo(W*.15,H*.72,W*.3,H*.45,W*.48,H*.2);
+  dctx.lineWidth=9; dctx.strokeStyle='#ff5f8fcc'; dctx.stroke();
+  dctx.lineWidth=3; dctx.strokeStyle='#ff5f8f66'; dctx.stroke();
+  dctx.beginPath(); dctx.moveTo(W*.52,H*.18); dctx.bezierCurveTo(W*.65,H*.28,W*.8,H*.6,W*.95,H*.78);
+  dctx.lineWidth=8; dctx.strokeStyle='#50e3c2bb'; dctx.stroke();
+  [.78,.6,.42,.3,.22].forEach(yf=>{
+    const gr=dctx.createLinearGradient(0,H*yf,W*.46,H*yf);
+    gr.addColorStop(0,'#5b8cff22'); gr.addColorStop(.2,'#5b8cffbb'); gr.addColorStop(.45,'#5b8cff44'); gr.addColorStop(1,'#5b8cff00');
+    dctx.fillStyle=gr; dctx.fillRect(0,H*yf-3,W*.46,6);
+  });
+  const ng=dctx.createRadialGradient(W*.7,H*.5,0,W*.7,H*.5,80);
+  ng.addColorStop(0,'#f5a623ee'); ng.addColorStop(.4,'#f5a62366'); ng.addColorStop(1,'#f5a62300');
+  dctx.fillStyle=ng; dctx.fillRect(W*.6,H*.15,140,H*.7);
+  dctx.globalCompositeOperation='source-over';
+}
+
+function importImage(e){
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{ const img=new Image(); img.onload=()=>{ dctx.fillStyle='#07070d'; dctx.fillRect(0,0,W,H); dctx.globalAlpha=.95; dctx.drawImage(img,0,0,W,H); dctx.globalAlpha=1; if(currentTab==='spec')renderSpec(); }; img.src=ev.target.result; };
+  reader.readAsDataURL(file); e.target.value='';
+}
+
+function getAC(){
+  if(!audioCtx){ audioCtx=new(window.AudioContext||window.webkitAudioContext)(); analyser=audioCtx.createAnalyser(); analyser.fftSize=512; analyser.connect(audioCtx.destination); }
+  if(audioCtx.state==='suspended')audioCtx.resume();
+  return audioCtx;
+}
+
+function togglePlay(){ if(playing)stopAll(); else startPlay(); }
+
+function stopAll(){
+  playing=false;
+  scheduledOscs.forEach(o=>{ try{o.stop(0);}catch(e){} }); scheduledOscs=[];
+  if(animId){cancelAnimationFrame(animId);animId=null;}
+  document.getElementById('playhead').style.display='none';
+  document.getElementById('play-btn').classList.remove('playing');
+  document.getElementById('play-icon').textContent='▶';
+  document.getElementById('play-lbl').textContent='reproduzir';
+  document.getElementById('m-state').textContent='pronto';
+  document.getElementById('m-prog').textContent='0%';
+  document.getElementById('m-col').textContent='—';
+  document.getElementById('m-freq').textContent='—';
+  document.getElementById('vol-bar').style.width='0%';
+}
+
+function startPlay(){
+  if(playing)return;
+  const ac=getAC(); playing=true;
+  document.getElementById('play-btn').classList.add('playing');
+  document.getElementById('play-icon').textContent='⏸';
+  document.getElementById('play-lbl').textContent='pausar';
+  document.getElementById('m-state').textContent='reproduzindo';
+
+  const img=dctx.getImageData(0,0,W,H);
+  const wtype=WAVES[Math.round(P.wave)];
+  const attSec=P.att/1000;
+  const master=ac.createGain(); master.gain.value=.55; master.connect(analyser);
+  const now=ac.currentTime+.05; playStartTime=now;
+  const sliceT=P.dur/W;
+
+  for(let col=0;col<W;col+=3){
+    const tStart=now+col/W*P.dur;
+    for(let row=0;row<H;row+=4){
+      const i=(row*W+col)*4;
+      const br=(img.data[i]*.299+img.data[i+1]*.587+img.data[i+2]*.114)/255;
+      if(br<.05)continue;
+      const freq=yToFreq(row), amp=Math.min(.1,br*.14), dur2=Math.max(sliceT*3,.05);
+      const osc=ac.createOscillator(), gn=ac.createGain();
+      osc.type=wtype; osc.frequency.value=freq;
+      gn.gain.setValueAtTime(0,tStart);
+      gn.gain.linearRampToValueAtTime(amp,tStart+Math.min(attSec,dur2*.3));
+      gn.gain.setValueAtTime(amp,tStart+dur2*.65);
+      gn.gain.linearRampToValueAtTime(0,tStart+dur2);
+      osc.connect(gn); gn.connect(master);
+      osc.start(tStart); osc.stop(tStart+dur2+.02);
+      scheduledOscs.push(osc);
+    }
+  }
+
+  const phEl=document.getElementById('playhead'); phEl.style.display='block';
+  const frameEl=document.getElementById('view-area');
+
+  function animate(){
+    if(!playing)return;
+    const elapsed=ac.currentTime-playStartTime, progress=Math.min(elapsed/P.dur,1);
+    const fw=frameEl.clientWidth, YOFF=38;
+    phEl.style.left=(YOFF+progress*(fw-YOFF))+'px';
+    document.getElementById('m-prog').textContent=Math.round(progress*100)+'%';
+    const col=Math.round(progress*W);
+    document.getElementById('m-col').textContent=col+'/'+W;
+    if(col<W){ let maxBr=0,maxRow=H/2; for(let row=0;row<H;row+=4){ const i=(row*W+col)*4; const br=(img.data[i]*.299+img.data[i+1]*.587+img.data[i+2]*.114)/255; if(br>maxBr){maxBr=br;maxRow=row;} } const df=Math.round(yToFreq(maxRow)); document.getElementById('m-freq').textContent=df>=1000?(df/1000).toFixed(2)+'kHz':df+'Hz'; }
+    const bufLen=analyser.frequencyBinCount, td=new Uint8Array(bufLen);
+    analyser.getByteTimeDomainData(td);
+    wctx.fillStyle='#07070d'; wctx.fillRect(0,0,waveC.width,waveC.height);
+    wctx.strokeStyle='#8860e0'; wctx.lineWidth=1.5; wctx.beginPath();
+    const sw=waveC.width/bufLen;
+    for(let i=0;i<bufLen;i++){ const v=td[i]/128,yy=(v*waveC.height)/2; i===0?wctx.moveTo(0,yy):wctx.lineTo(i*sw,yy); }
+    wctx.stroke();
+    const fd=new Uint8Array(bufLen); analyser.getByteFrequencyData(fd);
+    document.getElementById('vol-bar').style.width=Math.min(fd.reduce((s,v)=>s+v,0)/fd.length/128*100,100)+'%';
+    if(progress<1) animId=requestAnimationFrame(animate);
+    else setTimeout(()=>stopAll(),300);
+  }
+  animId=requestAnimationFrame(animate);
+}
+
+initDraw(); loadPreset(); updateXAxis();
+wctx.fillStyle='#07070d'; wctx.fillRect(0,0,waveC.width,waveC.height);
+wctx.strokeStyle='#2a2040'; wctx.lineWidth=1; wctx.beginPath(); wctx.moveTo(0,waveC.height/2); wctx.lineTo(waveC.width,waveC.height/2); wctx.stroke();
+</script>
+</body>
+</html>
