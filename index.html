@@ -413,8 +413,11 @@
 
         <div class="card">
           <div class="card-title">síntese</div>
+          <div class="prow"><span class="plabel">amplitude</span><span class="pval" id="pv-amp">75%</span></div>
+          <input class="pslider" type="range" min="0" max="100" step="1" value="75"
+                 oninput="P.amp=+this.value/100;document.getElementById('pv-amp').textContent=this.value+'%';if(masterGain)masterGain.gain.value=P.amp*0.8">
           <div class="prow"><span class="plabel">duração</span><span class="pval" id="pv-dur">3.0s</span></div>
-          <input class="pslider" type="range" min="1" max="8" step=".5" value="3"
+          <input class="pslider" type="range" min="1" max="30" step=".5" value="3"
                  oninput="P.dur=+this.value;document.getElementById('pv-dur').textContent=parseFloat(this.value).toFixed(1)+'s';updateXAxis()">
           <div class="prow"><span class="plabel">freq. base</span><span class="pval" id="pv-flo">80Hz</span></div>
           <input class="pslider" type="range" min="40" max="500" step="10" value="80"
@@ -428,6 +431,17 @@
           <div class="prow"><span class="plabel">ataque</span><span class="pval" id="pv-att">10ms</span></div>
           <input class="pslider" type="range" min="1" max="150" step="1" value="10"
                  oninput="P.att=+this.value;document.getElementById('pv-att').textContent=this.value+'ms'">
+        </div>
+
+        <div class="card">
+          <div class="card-title">transformar imagem</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <button class="tbtn" style="height:34px;justify-content:center" onclick="flipCanvas('h')" title="Espelhar horizontal">⇆ horiz.</button>
+            <button class="tbtn" style="height:34px;justify-content:center" onclick="flipCanvas('v')" title="Espelhar vertical">⇅ vert.</button>
+            <button class="tbtn" style="height:34px;justify-content:center" onclick="rotateCanvas(-90)" title="Girar 90° anti-horário">↺ −90°</button>
+            <button class="tbtn" style="height:34px;justify-content:center" onclick="rotateCanvas(90)" title="Girar 90° horário">↻ +90°</button>
+            <button class="tbtn" style="height:34px;justify-content:center;grid-column:1/-1" onclick="rotateCanvas(180)" title="Inverter 180°">⟳ 180°</button>
+          </div>
         </div>
 
         <div class="card">
@@ -605,7 +619,7 @@ const wctx=waveC.getContext('2d');
 
 let painting=false, drawMode='draw', currentColor='#ff5f8f', brushSize=7;
 let lineStart=null, palette='inferno', currentTab='draw';
-let P={dur:3,flo:80,fhi:4000,wave:0,att:10};
+let P={dur:3,flo:80,fhi:4000,wave:0,att:10,amp:0.75};
 const WAVES=['sine','triangle','square','sawtooth'];
 let audioCtx=null, analyser=null, playing=false;
 let scheduledOscs=[], playStartTime=0, animId=null;
@@ -821,7 +835,7 @@ function getAC(){
     analyser.fftSize=512;
     // master gain → analyser → destination
     masterGain=audioCtx.createGain();
-    masterGain.gain.value=0.6;
+    masterGain.gain.value=P.amp*0.8;
     masterGain.connect(analyser);
     analyser.connect(audioCtx.destination);
   }
@@ -994,6 +1008,34 @@ function startPlay(){
     else setTimeout(()=>stopAll(), 400);
   }
   animId = requestAnimationFrame(animate);
+}
+
+// ── Image transforms ──
+function applyTransform(transformFn){
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  const tctx = tmp.getContext('2d');
+  transformFn(tctx);
+  dctx.fillStyle='#07070d'; dctx.fillRect(0,0,W,H); dctx.drawImage(tmp,0,0);
+  offCtx.fillStyle='#07070d'; offCtx.fillRect(0,0,W,H); offCtx.drawImage(tmp,0,0);
+  try { pixelBuffer = offCtx.getImageData(0,0,W,H); } catch(e){ pixelBuffer=null; }
+  if(currentTab==='spec') renderSpec();
+}
+
+function flipCanvas(dir){
+  applyTransform(tctx=>{
+    if(dir==='h'){ tctx.translate(W,0); tctx.scale(-1,1); }
+    else          { tctx.translate(0,H); tctx.scale(1,-1); }
+    tctx.drawImage(drawCanvas,0,0);
+  });
+}
+
+function rotateCanvas(deg){
+  applyTransform(tctx=>{
+    tctx.translate(W/2,H/2);
+    tctx.rotate(deg*Math.PI/180);
+    tctx.drawImage(drawCanvas,-W/2,-H/2);
+  });
 }
 
 initDraw(); loadPreset(); updateXAxis();
